@@ -1,0 +1,42 @@
+steps:
+  # Build Docker Image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      [
+        'build',
+        '-t',
+        'asia-south1-docker.pkg.dev/bigquery-499208/cloud-run-source-deploy/my-agent:$COMMIT_SHA',
+        '.'
+      ]
+
+  # Push Image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      [
+        'push',
+        'asia-south1-docker.pkg.dev/bigquery-499208/cloud-run-source-deploy/my-agent:$COMMIT_SHA'
+      ]
+
+  # Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      [
+        'run',
+        'deploy',
+        'my-agent',
+        '--image',
+        'asia-south1-docker.pkg.dev/bigquery-499208/cloud-run-source-deploy/my-agent:$COMMIT_SHA',
+        '--region',
+        'asia-south1',
+        '--platform',
+        'managed',
+        '--allow-unauthenticated'
+      ]
+
+images:
+  - 'asia-south1-docker.pkg.dev/bigquery-499208/cloud-run-source-deploy/my-agent:$COMMIT_SHA'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+serviceAccount: 'projects/bigquery-499208/serviceAccounts/bigquery-agent@bigquery-499208.iam.gserviceaccount.com'
