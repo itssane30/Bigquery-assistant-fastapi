@@ -85,12 +85,18 @@ class BigQueryMCPClient:
         await self.session.initialize()
 
         logger.info(f"Connected to BigQuery MCP server at {self.url}")
+        logger.info(f"MCP Client instance: {id(self)}")
+        logger.info(f"Session instance: {id(self.session)}")
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
         # Forward the exception info (if any) so the stack unwinds exactly
         # as if this were one literal `async with` block.
-        return await self._stack.__aexit__(exc_type, exc, tb)
+        try:
+            return await self._stack.__aexit__(exc_type, exc, tb)
+        except Exception as e:
+            logger.warning(f"MCP cleanup error: {e}")
+            return False
 
     async def list_tools(self) -> list:
         """Returns the live list of MCP Tool objects the server advertises."""

@@ -22,7 +22,7 @@ async def chat(body: ChatRequest):
     start = time.time()
 
     try:
-        result = await answer_question(message)  # direct await, no asyncio.run()
+        result = await answer_question(message) 
     except Exception as exc:
         logger.exception("Agent failed to answer question")
         raise HTTPException(status_code=500, detail=str(exc))
