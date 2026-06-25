@@ -18,6 +18,8 @@ above this layer needs to change.
 
 from __future__ import annotations
 
+from contextlib import AsyncExitStack
+
 import google.auth
 import google.auth.transport.requests
 from mcp import ClientSession
@@ -62,9 +64,8 @@ class BigQueryMCPClient:
 
     def __init__(self, url: str | None = None):
         self.url = url or Config.BIGQUERY_MCP_URL
-        self._streams_cm = None
-        self._session_cm = None
         self.session: ClientSession | None = None
+        self._stack = AsyncExitStack()
 
     async def __aenter__(self) -> "BigQueryMCPClient":
         token = _get_access_token()
@@ -75,21 +76,21 @@ class BigQueryMCPClient:
             "x-goog-user-project": Config.PROJECT_ID,
         }
 
-        self._streams_cm = streamablehttp_client(self.url, headers=headers)
-        read_stream, write_stream, _ = await self._streams_cm.__aenter__()
-
-        self._session_cm = ClientSession(read_stream, write_stream)
-        self.session = await self._session_cm.__aenter__()
+        read_stream, write_stream, _ = await self._stack.enter_async_context(
+            streamablehttp_client(self.url, headers=headers)
+        )
+        self.session = await self._stack.enter_async_context(
+            ClientSession(read_stream, write_stream)
+        )
         await self.session.initialize()
 
         logger.info(f"Connected to BigQuery MCP server at {self.url}")
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
-        if self._session_cm is not None:
-            await self._session_cm.__aexit__(exc_type, exc, tb)
-        if self._streams_cm is not None:
-            await self._streams_cm.__aexit__(exc_type, exc, tb)
+        # Forward the exception info (if any) so the stack unwinds exactly
+        # as if this were one literal `async with` block.
+        return await self._stack.__aexit__(exc_type, exc, tb)
 
     async def list_tools(self) -> list:
         """Returns the live list of MCP Tool objects the server advertises."""
@@ -100,7 +101,6 @@ class BigQueryMCPClient:
         """Executes one MCP tool call and returns its text content."""
         result = await self.session.call_tool(name, arguments)
 
-        # MCP responses contain blocks (TextBlock, ImageBlock, ResourceBlock etc.)
         texts = [block.text for block in result.content if hasattr(block, "text")]
         text = "\n".join(texts) if texts else str(result.content)
 
