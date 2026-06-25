@@ -5,7 +5,9 @@ from pathlib import Path
 
 from app.routes.chat import chat_router
 from app.routes.health import health_router
+from app.utils.logger import get_logger
 
+logger = get_logger(__name__)
 
 def create_app() -> FastAPI:
     app = FastAPI(title="BigQuery AI Assistant")
@@ -25,4 +27,5 @@ def create_app() -> FastAPI:
     async def index():
         return FileResponse(Path(__file__).parent / "templates" / "index.html")
 
+    logger.info("FastAPI app created")
     return app
