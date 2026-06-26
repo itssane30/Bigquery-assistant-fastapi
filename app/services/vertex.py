@@ -13,6 +13,32 @@ from google.genai import types
 from app.config import Config
 
 
+class GenaiAsyncClient:
+    """Request-scoped async client wrapper that keeps the sync client alive.
+
+    The google-genai SDK stores shared state in the sync `Client` object, and
+    the async wrapper depends on it. If the sync client is garbage collected
+    too early, its destructor may close shared resources while the async
+    client is still in use.
+    """
+
+    def __init__(self, client: genai.Client):
+        self._client = client
+        self._aio = client.aio
+
+    async def __aenter__(self) -> AsyncClient:
+        return self._aio
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        try:
+            await self._aio.aclose()
+        finally:
+            self._client.close()
+
+    def __getattr__(self, name):
+        return getattr(self._aio, name)
+
+
 def build_genai_client() -> genai.Client:
     """Create a fresh google-genai Client configured for Vertex AI."""
     return genai.Client(
@@ -37,6 +63,6 @@ def get_genai_client() -> genai.Client:
     return build_genai_client()
 
 
-def get_genai_async_client() -> AsyncClient:
+def get_genai_async_client() -> GenaiAsyncClient:
     """Return a fresh async google-genai client for request-scoped use."""
-    return build_genai_client().aio
+    return GenaiAsyncClient(build_genai_client())
