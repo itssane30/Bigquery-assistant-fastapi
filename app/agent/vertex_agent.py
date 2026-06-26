@@ -26,7 +26,7 @@ from app.config import Config
 from app.mcp.bigquery_tools import mcp_tools_to_gemini_declarations
 from app.mcp.client import BigQueryMCPClient
 from app.prompts.system_prompt import build_system_prompt
-from app.services.vertex import get_genai_client
+from app.services.vertex import get_genai_async_client
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -50,29 +50,29 @@ def _extract_sql(trace: list[dict]) -> str | None:
 async def answer_question(question: str) -> dict:
     """Runs one full question through the agent and returns a structured result."""
     start = time.time()
-    client = get_genai_client()
 
-    async with BigQueryMCPClient() as mcp_client:
-        mcp_tools = await mcp_client.list_tools()
-        logger.info(f"BigQuery MCP server advertised tools: {[t.name for t in mcp_tools]}")
+    async with get_genai_async_client() as client:
+        async with BigQueryMCPClient() as mcp_client:
+            mcp_tools = await mcp_client.list_tools()
+            logger.info(f"BigQuery MCP server advertised tools: {[t.name for t in mcp_tools]}")
 
-        gemini_tool = types.Tool(function_declarations=mcp_tools_to_gemini_declarations(mcp_tools))
+            gemini_tool = types.Tool(function_declarations=mcp_tools_to_gemini_declarations(mcp_tools))
 
-        config = types.GenerateContentConfig(
-            tools=[gemini_tool],
-            system_instruction=build_system_prompt(),
-            temperature=0.2,
-        )
+            config = types.GenerateContentConfig(
+                tools=[gemini_tool],
+                system_instruction=build_system_prompt(),
+                temperature=0.2,
+            )
 
-        contents = [types.Content(role="user", parts=[types.Part.from_text(text=question)])]
+            contents = [types.Content(role="user", parts=[types.Part.from_text(text=question)])]
 
-        answer_text, trace = await run_agent_loop(
-            client=client,
-            model=Config.MODEL,
-            contents=contents,
-            config=config,
-            mcp_client=mcp_client,
-        )
+            answer_text, trace = await run_agent_loop(
+                client=client,
+                model=Config.MODEL,
+                contents=contents,
+                config=config,
+                mcp_client=mcp_client,
+            )
 
     return {
         "answer": answer_text,

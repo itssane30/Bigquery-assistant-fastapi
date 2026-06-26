@@ -23,7 +23,7 @@ from contextlib import AsyncExitStack
 import google.auth
 import google.auth.transport.requests
 from mcp import ClientSession
-from mcp.client.streamable_http import streamablehttp_client
+from mcp.client.streamable_http import create_mcp_http_client, streamable_http_client
 
 from app.config import Config
 from app.utils.logger import get_logger
@@ -65,7 +65,7 @@ class BigQueryMCPClient:
     def __init__(self, url: str | None = None):
         self.url = url or Config.BIGQUERY_MCP_URL
         self.session: ClientSession | None = None
-        self._stack = AsyncExitStack()
+        self._stack: AsyncExitStack | None = None
 
     async def __aenter__(self) -> "BigQueryMCPClient":
         token = _get_access_token()
@@ -76,8 +76,12 @@ class BigQueryMCPClient:
             "x-goog-user-project": Config.PROJECT_ID,
         }
 
+        self._stack = AsyncExitStack()
+        client = create_mcp_http_client(headers=headers)
+        await self._stack.enter_async_context(client)
+
         read_stream, write_stream, _ = await self._stack.enter_async_context(
-            streamablehttp_client(self.url, headers=headers)
+            streamable_http_client(self.url, http_client=client)
         )
         self.session = await self._stack.enter_async_context(
             ClientSession(read_stream, write_stream)
@@ -90,13 +94,14 @@ class BigQueryMCPClient:
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
-        # Forward the exception info (if any) so the stack unwinds exactly
-        # as if this were one literal `async with` block.
+        if self._stack is None:
+            return False
+
         try:
             return await self._stack.__aexit__(exc_type, exc, tb)
-        except Exception as e:
-            logger.warning(f"MCP cleanup error: {e}")
-            return False
+        finally:
+            self._stack = None
+            self.session = None
 
     async def list_tools(self) -> list:
         """Returns the live list of MCP Tool objects the server advertises."""

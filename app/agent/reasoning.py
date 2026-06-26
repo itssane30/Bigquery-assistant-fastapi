@@ -21,6 +21,7 @@ from __future__ import annotations
 import time
 
 from google import genai
+from google.genai.client import AsyncClient
 from google.genai import types
 
 from app.config import Config
@@ -31,7 +32,7 @@ logger = get_logger(__name__)
 
 
 async def run_agent_loop(
-    client: genai.Client,
+    client: AsyncClient,
     model: str,
     contents: list[types.Content],
     config: types.GenerateContentConfig,
@@ -48,7 +49,7 @@ async def run_agent_loop(
     trace: list[dict] = []
 
     for step in range(max_steps):
-        response = await client.aio.models.generate_content(
+        response = await client.models.generate_content(
             model=model,
             contents=contents,
             config=config,
